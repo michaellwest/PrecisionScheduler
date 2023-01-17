@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Copyright>2023 Michael West</Copyright>
+    <RepositoryType>GitHub</RepositoryType>
+    <RepositoryUrl>https://github.com/michaellwest/precisionscheduler</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/michaellwest/precisionscheduler</PackageProjectUrl>
+    <Description>Replacement for the out-of-the-box scheduler included with Sitecore.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="App_Config\Modules\PrecisionScheduler\PrecisionScheduler.config">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <IncludeInPackage>true</IncludeInPackage>
+      <PackageCopyToOutput>true</PackageCopyToOutput>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Hangfire.AspNet" Version="0.2.0" />
+    <PackageReference Include="Hangfire.Core" Version="1.7.32" />
+    <PackageReference Include="Hangfire.MemoryStorage" Version="1.7.0" />
+    <PackageReference Include="Sitecore.Kernel" Version="10.2.0" />
+    <PackageReference Include="Sitecore.Owin" Version="10.2.0" />
+  </ItemGroup>
+
+</Project>
