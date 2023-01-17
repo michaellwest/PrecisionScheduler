@@ -7,6 +7,9 @@
     <RepositoryUrl>https://github.com/michaellwest/precisionscheduler</RepositoryUrl>
     <PackageProjectUrl>https://github.com/michaellwest/precisionscheduler</PackageProjectUrl>
     <Description>Replacement for the out-of-the-box scheduler included with Sitecore.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Title>PrecisionScheduler</Title>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,6 +18,13 @@
       <IncludeInPackage>true</IncludeInPackage>
       <PackageCopyToOutput>true</PackageCopyToOutput>
     </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
   </ItemGroup>
 
   <ItemGroup>
