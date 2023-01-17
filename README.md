@@ -7,6 +7,8 @@ PrecisionScheduler for Sitecore is a drop-in replacement for the standard Task S
 * Hangfire.AspNet
 * Hangfire.Core
 * Hangfire.MemoryStorage
+* Sitecore.Kernel
+* Sitecore.Owin
 
 ## Configuration
 
