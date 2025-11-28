@@ -27,6 +27,8 @@ If you are installing using `PackageReference` instead of `packages.config` you'
         <processor type="PrecisionScheduler.Pipelines.Initialize.Scheduler, PrecisionsScheduler">
           <StartupDelaySeconds>30</StartupDelaySeconds>
           <RefreshSchedule>*/2 * * * *</RefreshSchedule>
+          <!-- Options: Ignore, FireOnce, FireAll (Default)-->
+          <MisfireBehavior>FireAll</MisfireBehavior>
         </processor>
       </owin.initialize>
     </pipelines>

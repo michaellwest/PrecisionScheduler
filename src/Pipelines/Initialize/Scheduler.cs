@@ -15,7 +15,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
 namespace PrecisionScheduler.Pipelines.Initialize
 {
@@ -25,6 +24,7 @@ namespace PrecisionScheduler.Pipelines.Initialize
 
         public string RefreshSchedule { get; set; } = "*/2 * * * *";
         public int StartupDelaySeconds { get; set; } = 15;
+        public string MisfireBehavior { get; set; } = "Relaxed";
 
         private static void LogMessage(string message)
         {
@@ -42,7 +42,29 @@ namespace PrecisionScheduler.Pipelines.Initialize
             });
 
             LogMessage("Starting up precision scheduler.");
-            BackgroundJob.Schedule(() => Initialize(RefreshSchedule), TimeSpan.FromSeconds(StartupDelaySeconds));
+            var misfireHandlingMode = MisfireHandlingMode.Relaxed;
+            switch (MisfireBehavior)
+            {
+                case var behavior when string.Equals(behavior, "Ignore", StringComparison.InvariantCultureIgnoreCase):
+                    misfireHandlingMode = MisfireHandlingMode.Ignorable;
+                    break;
+                case var behavior when string.Equals(behavior, "FireAll", StringComparison.InvariantCultureIgnoreCase):
+                    misfireHandlingMode = MisfireHandlingMode.Strict;
+                    break;
+                case var behavior when string.Equals(behavior, "FireOnce", StringComparison.InvariantCultureIgnoreCase):
+                    break;
+                case var behavior when string.IsNullOrEmpty(behavior):
+                default:
+                    misfireHandlingMode = MisfireHandlingMode.Relaxed;
+                    break;
+            }
+
+            var recurringJobOptions = new RecurringJobOptions
+            {
+                TimeZone = TimeZoneInfo.Local,
+                MisfireHandling = misfireHandlingMode
+            };
+            BackgroundJob.Schedule(() => Initialize(RefreshSchedule, recurringJobOptions), TimeSpan.FromSeconds(StartupDelaySeconds));
         }
 
         private static string GenerateMultiDayCronExpression(TimeSpan runTime, List<DayOfWeek> daysToRun)
@@ -143,10 +165,10 @@ namespace PrecisionScheduler.Pipelines.Initialize
             JobManager.Start(jobOptions);
         }
 
-        public static void Initialize(string refreshSchedule)
+        public static void Initialize(string refreshSchedule, RecurringJobOptions jobOptions)
         {
             ManageJobs(true);
-            RecurringJob.AddOrUpdate(nameof(ManageJobs), () => ManageJobs(false), refreshSchedule, TimeZoneInfo.Local);
+            RecurringJob.AddOrUpdate(nameof(ManageJobs), () => ManageJobs(false), refreshSchedule, jobOptions);
         }
 
         public static void ManageJobs(bool isStartup)
