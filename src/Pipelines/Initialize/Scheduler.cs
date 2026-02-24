@@ -169,8 +169,6 @@ namespace PrecisionScheduler.Pipelines.Initialize
             }
 
             LogMessage($"Running background job for {itemId}.");
-            var scheduleItem = new ScheduleItem(item);
-
             var jobOptions = new DefaultJobOptions(jobName, "scheduling", "scheduler", Activator.CreateInstance(typeof(JobRunner)), "Run", new object[] { ID.Parse(itemId) });
             JobManager.Start(jobOptions);
         }
@@ -237,7 +235,7 @@ namespace PrecisionScheduler.Pipelines.Initialize
                         if (!string.Equals(job.Cron, schedule, StringComparison.InvariantCultureIgnoreCase))
                         {
                             LogMessage($"Updating {itemId} with a new schedule '{schedule}'.");
-                            RecurringJob.AddOrUpdate($"{itemId}", () => RunSchedule(ID.Parse(itemId)), schedule, TimeZoneInfo.Local);
+                            RecurringJob.AddOrUpdate($"{itemId}", () => RunSchedule(ID.Parse(itemId)), schedule, new RecurringJobOptions { TimeZone = TimeZoneInfo.Local });
                         }
 
                         existingJobs.Add(itemId);
@@ -258,7 +256,7 @@ namespace PrecisionScheduler.Pipelines.Initialize
                         var schedule = GetSchedule(item);
 
                         LogMessage($"Registering recurring job for {itemId} with schedule '{schedule}'.");
-                        RecurringJob.AddOrUpdate($"{itemId}", () => RunSchedule(ID.Parse(itemId)), schedule, TimeZoneInfo.Local);
+                        RecurringJob.AddOrUpdate($"{itemId}", () => RunSchedule(ID.Parse(itemId)), schedule, new RecurringJobOptions { TimeZone = TimeZoneInfo.Local });
                     }
                     catch (Exception ex)
                     {
@@ -282,14 +280,41 @@ namespace PrecisionScheduler.Pipelines.Initialize
                             var item = database.GetItem(itemId);
                             var scheduleItem = new ScheduleItem(item);
 
-                            var missedLastRun = recurringJob.NextExecution - scheduleItem.LastRun > TimeSpan.FromHours(24);
-                            if (missedLastRun)
+                            // Missed-run detection: fire a catch-up execution only when the job
+                            // missed its scheduled window during a server outage or restart.
+                            //
+                            // Strategy — one-interval window:
+                            //   1. Compute the first occurrence that should have fired after LastRun.
+                            //   2. If that occurrence is now in the past, a run was missed.
+                            //   3. Only fire if the *next* occurrence after the missed one is still
+                            //      in the future, meaning we are still within that missed window.
+                            //      Once a second occurrence has also passed we treat the job as too
+                            //      stale to catch up (avoids firing a weeks-old miss on restart).
+                            //
+                            // Examples:
+                            //   Daily 09:00 — server down 08:30, back at 09:30 → fires (next is tomorrow)
+                            //   Daily 09:00 — server down 36 h → skips (next 09:00 already passed too)
+                            //   Every Saturday — server down over weekend → fires (next Saturday is future)
+                            //   Every Saturday — server down 3 weeks → skips (2nd Saturday also past)
+                            //   Every 5 min  — server down 2 h → skips (next 5-min slot also past)
+                            if (scheduleItem.LastRun > DateTime.MinValue && !string.IsNullOrEmpty(recurringJob.Cron))
                             {
-                                LogMessage($"Running missed job {itemId}.");
-                                var jobName = $"{nameof(PrecisionScheduler)}-{itemId}";
+                                var cronExpression = Cronos.CronExpression.Parse(recurringJob.Cron);
+                                var lastRunUtc = DateTime.SpecifyKind(scheduleItem.LastRun, DateTimeKind.Utc);
+                                var expectedRun = cronExpression.GetNextOccurrence(lastRunUtc, TimeZoneInfo.Local);
+                                if (expectedRun.HasValue && expectedRun.Value < DateTime.UtcNow)
+                                {
+                                    var nextAfterExpected = cronExpression.GetNextOccurrence(expectedRun.Value, TimeZoneInfo.Local);
+                                    var isWithinOneInterval = !nextAfterExpected.HasValue || nextAfterExpected.Value > DateTime.UtcNow;
+                                    if (isWithinOneInterval)
+                                    {
+                                        LogMessage($"Running missed job {itemId}.");
+                                        var jobName = $"{nameof(PrecisionScheduler)}-{itemId}";
 
-                                var jobOptions = new DefaultJobOptions(jobName, "scheduling", "scheduler", Activator.CreateInstance(typeof(JobRunner)), "Run", new object[] { ID.Parse(itemId) });
-                                JobManager.Start(jobOptions);
+                                        var jobOptions = new DefaultJobOptions(jobName, "scheduling", "scheduler", Activator.CreateInstance(typeof(JobRunner)), "Run", new object[] { ID.Parse(itemId) });
+                                        JobManager.Start(jobOptions);
+                                    }
+                                }
                             }
                         }
                         catch (Exception ex)
