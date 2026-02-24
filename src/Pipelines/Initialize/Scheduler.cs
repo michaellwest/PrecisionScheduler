@@ -31,6 +31,16 @@ namespace PrecisionScheduler.Pipelines.Initialize
             Log.Info($"[PrecisionScheduler] {message}", nameof(Scheduler));
         }
 
+        private static void LogWarning(string message)
+        {
+            Log.Warn($"[PrecisionScheduler] {message}", nameof(Scheduler));
+        }
+
+        private static void LogError(string message, Exception ex)
+        {
+            Log.Error($"[PrecisionScheduler] {message}", ex, nameof(Scheduler));
+        }
+
         public override void Process(InitializeArgs args)
         {
             var app = args.App;
@@ -173,86 +183,125 @@ namespace PrecisionScheduler.Pipelines.Initialize
 
         public static void ManageJobs(bool isStartup)
         {
-            var database = ServiceLocator.ServiceProvider.GetRequiredService<BaseFactory>().GetDatabase(SCHEDULE_DATABASE, true);
-            var descendants = database.SelectItems($"/sitecore/system/tasks/schedules//*[@@templateid='{TemplateIDs.Schedule}']");
-            var schedules = new Dictionary<string, string>();
-
-            foreach (var item in descendants)
+            try
             {
-                if (item.TemplateID != TemplateIDs.Schedule) continue;
-                var itemId = item.ID.ToString();
-                var schedule = GetSchedule(item);
-                if (string.IsNullOrEmpty(schedule)) continue;
-                schedules.Add(itemId, schedule);
-            }
+                var database = ServiceLocator.ServiceProvider.GetRequiredService<BaseFactory>().GetDatabase(SCHEDULE_DATABASE, true);
+                var descendants = database.SelectItems($"/sitecore/system/tasks/schedules//*[@@templateid='{TemplateIDs.Schedule}']");
+                var schedules = new Dictionary<string, string>();
 
-            var jobs = JobStorage.Current.GetConnection().GetRecurringJobs();
-            var existingJobs = new List<string>();
-            foreach (var job in jobs)
-            {
-                if (!ID.IsID(job.Id)) continue;
-                var itemId = job.Id;
-
-                if (!schedules.ContainsKey(itemId))
+                foreach (var item in descendants)
                 {
-                    LogMessage($"Removing {itemId} from recurring schedule.");
-                    RecurringJob.RemoveIfExists(itemId);
-                    continue;
-                }
-
-                var item = database.GetItem(itemId);
-                var schedule = GetSchedule(item);
-                if (string.IsNullOrEmpty(schedule))
-                {
-                    LogMessage($"Removing {itemId} from recurring schedule with invalid expression.");
-                    RecurringJob.RemoveIfExists(itemId);
-                    continue;
-                }
-
-                if (!string.Equals(job.Cron, schedule, StringComparison.InvariantCultureIgnoreCase))
-                {
-                    LogMessage($"Updating {itemId} with a new schedule '{schedule}'.");
-                    RecurringJob.AddOrUpdate($"{itemId}", () => RunSchedule(ID.Parse(itemId)), schedule, TimeZoneInfo.Local);
-                }
-
-                existingJobs.Add(itemId);
-            }
-
-            var missingJobs = schedules.Keys.Except(existingJobs);
-            foreach (var missingJob in missingJobs)
-            {
-                var itemId = missingJob;
-                var item = database.GetItem(itemId);
-                var schedule = GetSchedule(item);
-
-                LogMessage($"Registering recurring job for {itemId} with schedule '{schedule}'.");
-                RecurringJob.AddOrUpdate($"{itemId}", () => RunSchedule(ID.Parse(itemId)), schedule, TimeZoneInfo.Local);
-            }
-
-            if (isStartup)
-            {
-                var recurringJobs = JobStorage.Current.GetConnection().GetRecurringJobs();
-                if (recurringJobs == null) return;
-
-                foreach (var recurringJob in recurringJobs)
-                {
-                    if (!ID.IsID(recurringJob.Id)) continue;
-                    var itemId = recurringJob.Id;
-
-                    if (!schedules.ContainsKey(itemId)) continue;
-                    var item = database.GetItem(itemId);
-                    var scheduleItem = new ScheduleItem(item);
-
-                    var missedLastRun = recurringJob.NextExecution - scheduleItem.LastRun > TimeSpan.FromHours(24);
-                    if (missedLastRun)
+                    try
                     {
-                        LogMessage($"Running missed job {itemId}.");
-                        var jobName = $"{nameof(PrecisionScheduler)}-{itemId}";
-
-                        var jobOptions = new DefaultJobOptions(jobName, "scheduling", "scheduler", Activator.CreateInstance(typeof(JobRunner)), "Run", new object[] { ID.Parse(itemId) });
-                        JobManager.Start(jobOptions);
+                        if (item.TemplateID != TemplateIDs.Schedule) continue;
+                        var itemId = item.ID.ToString();
+                        var schedule = GetSchedule(item);
+                        if (string.IsNullOrEmpty(schedule))
+                        {
+                            LogWarning($"Skipping schedule item '{item.Paths.Path}' ({itemId}) — empty or unrecognised recurrence value.");
+                            continue;
+                        }
+                        schedules.Add(itemId, schedule);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogError($"Error reading schedule item '{item?.Paths?.Path ?? item?.ID?.ToString()}' during inventory.", ex);
                     }
                 }
+
+                var jobs = JobStorage.Current.GetConnection().GetRecurringJobs();
+                var existingJobs = new List<string>();
+                foreach (var job in jobs)
+                {
+                    try
+                    {
+                        if (!ID.IsID(job.Id)) continue;
+                        var itemId = job.Id;
+
+                        if (!schedules.ContainsKey(itemId))
+                        {
+                            LogMessage($"Removing {itemId} from recurring schedule.");
+                            RecurringJob.RemoveIfExists(itemId);
+                            continue;
+                        }
+
+                        var item = database.GetItem(itemId);
+                        var schedule = GetSchedule(item);
+                        if (string.IsNullOrEmpty(schedule))
+                        {
+                            LogWarning($"Removing {itemId} from recurring schedule — item has an invalid or empty recurrence expression.");
+                            RecurringJob.RemoveIfExists(itemId);
+                            continue;
+                        }
+
+                        if (!string.Equals(job.Cron, schedule, StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            LogMessage($"Updating {itemId} with a new schedule '{schedule}'.");
+                            RecurringJob.AddOrUpdate($"{itemId}", () => RunSchedule(ID.Parse(itemId)), schedule, TimeZoneInfo.Local);
+                        }
+
+                        existingJobs.Add(itemId);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogError($"Error managing recurring job '{job?.Id}'.", ex);
+                    }
+                }
+
+                var missingJobs = schedules.Keys.Except(existingJobs);
+                foreach (var missingJob in missingJobs)
+                {
+                    try
+                    {
+                        var itemId = missingJob;
+                        var item = database.GetItem(itemId);
+                        var schedule = GetSchedule(item);
+
+                        LogMessage($"Registering recurring job for {itemId} with schedule '{schedule}'.");
+                        RecurringJob.AddOrUpdate($"{itemId}", () => RunSchedule(ID.Parse(itemId)), schedule, TimeZoneInfo.Local);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogError($"Error registering recurring job '{missingJob}'.", ex);
+                    }
+                }
+
+                if (isStartup)
+                {
+                    var recurringJobs = JobStorage.Current.GetConnection().GetRecurringJobs();
+                    if (recurringJobs == null) return;
+
+                    foreach (var recurringJob in recurringJobs)
+                    {
+                        try
+                        {
+                            if (!ID.IsID(recurringJob.Id)) continue;
+                            var itemId = recurringJob.Id;
+
+                            if (!schedules.ContainsKey(itemId)) continue;
+                            var item = database.GetItem(itemId);
+                            var scheduleItem = new ScheduleItem(item);
+
+                            var missedLastRun = recurringJob.NextExecution - scheduleItem.LastRun > TimeSpan.FromHours(24);
+                            if (missedLastRun)
+                            {
+                                LogMessage($"Running missed job {itemId}.");
+                                var jobName = $"{nameof(PrecisionScheduler)}-{itemId}";
+
+                                var jobOptions = new DefaultJobOptions(jobName, "scheduling", "scheduler", Activator.CreateInstance(typeof(JobRunner)), "Run", new object[] { ID.Parse(itemId) });
+                                JobManager.Start(jobOptions);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            LogError($"Error processing missed job '{recurringJob?.Id}' on startup.", ex);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogError("Unhandled error in ManageJobs — the refresh cycle will retry on the next scheduled tick.", ex);
             }
         }
 
