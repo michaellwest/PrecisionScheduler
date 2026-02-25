@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <Copyright>2023-2025 Michael West</Copyright>
+    <Copyright>2023-2026 Michael West</Copyright>
     <RepositoryType>GitHub</RepositoryType>
     <RepositoryUrl>https://github.com/michaellwest/precisionscheduler</RepositoryUrl>
     <PackageProjectUrl>https://github.com/michaellwest/precisionscheduler</PackageProjectUrl>
@@ -10,6 +10,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <Title>PrecisionScheduler</Title>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Version>1.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
