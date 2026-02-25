@@ -2,3 +2,4 @@ _out
 \.vs
 bin
 obj
+.claude/settings.local.json

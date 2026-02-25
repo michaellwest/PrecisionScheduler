@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <Copyright>2023-2025 Michael West</Copyright>
+    <Copyright>2023-2026 Michael West</Copyright>
     <RepositoryType>GitHub</RepositoryType>
     <RepositoryUrl>https://github.com/michaellwest/precisionscheduler</RepositoryUrl>
     <PackageProjectUrl>https://github.com/michaellwest/precisionscheduler</PackageProjectUrl>
@@ -10,6 +10,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <Title>PrecisionScheduler</Title>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Version>1.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -28,6 +29,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Cronos" Version="0.8.4" />
     <PackageReference Include="Hangfire.AspNet" Version="0.3.0" />
     <PackageReference Include="Hangfire.Core" Version="1.8.22" />
     <PackageReference Include="Hangfire.MemoryStorage" Version="1.8.1.2" />
